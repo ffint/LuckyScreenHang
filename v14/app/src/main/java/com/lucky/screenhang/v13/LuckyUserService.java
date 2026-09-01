@@ -5,10 +5,13 @@ import java.nio.charset.StandardCharsets;
 import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.Locale;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 public class LuckyUserService extends ILuckyUserService.Stub {
     private final StringBuilder log = new StringBuilder();
+    private final Object logLock = new Object();
     private final AtomicBoolean running = new AtomicBoolean(false);
     private volatile int oldTimeout = 60000;
     private volatile Process watcherProcess;
@@ -17,7 +20,7 @@ public class LuckyUserService extends ILuckyUserService.Stub {
 
     @Override public void destroy() { add("destroy"); System.exit(0); }
 
-    @Override public synchronized int screenOff() {
+    @Override public int screenOff() {
         add("screenOff request uid=" + android.os.Process.myUid() + " pid=" + android.os.Process.myPid());
         if (!running.compareAndSet(false, true)) { add("already running"); return 46; }
         try {
@@ -27,24 +30,26 @@ public class LuckyUserService extends ILuckyUserService.Stub {
             if (set != 0) { add("set timeout failed=" + set); running.set(false); return 43; }
 
             watcherProcess = null;
-            Thread watcher = new Thread(this::watchPowerAndRestore, "LuckyPowerWatcher");
+            CountDownLatch watcherReady = new CountDownLatch(1);
+            Thread watcher = new Thread(() -> watchPowerAndRestore(watcherReady), "LuckyPowerWatcher");
             watcher.setDaemon(false);
             watcher.start();
 
-            for (int i=0; i<10 && watcherProcess==null && running.get(); i++) {
-                try { Thread.sleep(50); } catch (InterruptedException ignored) {}
-            }
+            boolean ready;
+            try { ready = watcherReady.await(1500, TimeUnit.MILLISECONDS); }
+            catch (InterruptedException e) { Thread.currentThread().interrupt(); ready = false; }
             Process wp = watcherProcess;
-            if (wp == null || !wp.isAlive()) {
-                add("watcher failed to stay alive");
-                restore(); running.set(false); return 44;
+            if (!ready || wp == null || !wp.isAlive()) {
+                add("watcher failed to become ready ready=" + ready + " process=" + (wp != null));
+                return 44;
             }
+            add("watcher ready pid=" + wp.pid());
 
             int off = commandCode("/system/bin/cmd", "display", "power-off", "0");
             add("power-off rc=" + off);
             if (off != 0) {
                 try { wp.destroy(); } catch (Throwable ignored) {}
-                restore(); running.set(false); return 45;
+                return 45;
             }
             return 0;
         } catch (Throwable t) {
@@ -53,12 +58,13 @@ public class LuckyUserService extends ILuckyUserService.Stub {
         }
     }
 
-    private void watchPowerAndRestore() {
+    private void watchPowerAndRestore(CountDownLatch ready) {
         Process p = null;
         try {
             add("watcher starting getevent");
             p = new ProcessBuilder("/system/bin/getevent", "-ql").redirectErrorStream(true).start();
             watcherProcess = p;
+            ready.countDown();
             try (BufferedReader br = new BufferedReader(new InputStreamReader(p.getInputStream()))) {
                 String line;
                 while ((line = br.readLine()) != null) {
@@ -70,8 +76,10 @@ public class LuckyUserService extends ILuckyUserService.Stub {
                 if (power.contains("mWakefulness=Asleep") || power.contains("mWakefulness=Dozing") || power.contains("mInteractive=false")) break;
                 try { Thread.sleep(100); } catch (InterruptedException ignored) {}
             }
-        } catch (Throwable t) { add("watcher exception: " + t); }
-        finally {
+        } catch (Throwable t) {
+            ready.countDown();
+            add("watcher exception: " + t);
+        } finally {
             watcherProcess = null;
             if (p != null) p.destroy();
             restore(); running.set(false); add("watcher restored display");
@@ -106,15 +114,17 @@ public class LuckyUserService extends ILuckyUserService.Stub {
         } catch(Throwable t) { add("command exception "+String.join(" ",cmd)+": "+t); return 127; }
     }
 
-    private synchronized void add(String s) {
-        String ts = new SimpleDateFormat("HH:mm:ss.SSS", Locale.US).format(new Date());
-        log.append(ts).append(' ').append(s).append('\n');
-        if (log.length()>20000) log.delete(0, log.length()-16000);
-        try (FileOutputStream f = new FileOutputStream("/sdcard/Download/LuckyScreenHang-v14.log")) {
-            f.write(log.toString().getBytes(StandardCharsets.UTF_8));
-        } catch(Throwable ignored) {}
+    private void add(String s) {
+        synchronized (logLock) {
+            String ts = new SimpleDateFormat("HH:mm:ss.SSS", Locale.US).format(new Date());
+            log.append(ts).append(' ').append(s).append('\n');
+            if (log.length()>20000) log.delete(0, log.length()-16000);
+            try (FileOutputStream f = new FileOutputStream("/sdcard/Download/LuckyScreenHang-v14.log")) {
+                f.write(log.toString().getBytes(StandardCharsets.UTF_8));
+            } catch(Throwable ignored) {}
+        }
     }
 
     @Override public String status() { return "uid="+android.os.Process.myUid()+", pid="+android.os.Process.myPid()+", running="+running.get(); }
-    @Override public synchronized String getLog() { return log.toString(); }
+    @Override public String getLog() { synchronized (logLock) { return log.toString(); } }
 }
