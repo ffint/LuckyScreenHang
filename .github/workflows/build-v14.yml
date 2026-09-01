@@ -5,10 +5,9 @@ on:
     paths: ['v14/**', '.github/workflows/build-v14.yml']
   workflow_dispatch:
 permissions:
-  contents: write
+  contents: read
 jobs:
   build:
-    if: github.actor != 'github-actions[bot]'
     runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
@@ -18,7 +17,6 @@ jobs:
           java-version: '17'
       - name: Normalize Android 17 SDK path
         run: |
-          ls -la "$ANDROID_HOME/platforms"
           if [ ! -e "$ANDROID_HOME/platforms/android-37" ]; then
             ln -s "$ANDROID_HOME/platforms/android-37.0" "$ANDROID_HOME/platforms/android-37"
           fi
@@ -28,12 +26,12 @@ jobs:
       - name: Build unsigned release
         working-directory: v14
         run: gradle :app:assembleRelease --stacktrace
-      - name: Publish build as base64 for retrieval
+      - name: Collect APK
         run: |
-          APK=$(find v14/app/build/outputs/apk/release -name '*.apk' | head -1)
-          base64 "$APK" | tr -d '\n' > v14/LuckyScreenHang-v1.4-exp-unsigned.apk.b64
-          git config user.name github-actions[bot]
-          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
-          git add v14/LuckyScreenHang-v1.4-exp-unsigned.apk.b64
-          git commit -m 'Build v1.4 experimental APK [skip ci]'
-          git push
+          mkdir -p artifact
+          cp $(find v14/app/build/outputs/apk/release -name '*.apk' | head -1) artifact/LuckyScreenHang-v1.4-exp-unsigned.apk
+      - uses: actions/upload-artifact@v4
+        with:
+          name: LuckyScreenHang-v1.4-exp
+          path: artifact/LuckyScreenHang-v1.4-exp-unsigned.apk
+          retention-days: 7
