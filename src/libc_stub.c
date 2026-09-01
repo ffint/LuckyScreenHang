@@ -11,3 +11,7 @@ int snprintf(char *s, unsigned long n, const char *f, ...) { (void)s; (void)n; (
 int pthread_create(pthread_t *t, const void *a, void *(*fn)(void*), void *arg) { (void)t; (void)a; (void)fn; (void)arg; return 0; }
 int pthread_detach(pthread_t t) { (void)t; return 0; }
 unsigned int sleep(unsigned int s) { return s; }
+
+int open(const char *path, int flags, ...) { (void)path; (void)flags; return -1; }
+long write(int fd, const void *buf, unsigned long count) { (void)fd; (void)buf; return (long)count; }
+int close(int fd) { (void)fd; return 0; }

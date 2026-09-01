@@ -1,6 +1,6 @@
 # LuckyScreenHang
 
-轻量 Android 息屏挂机工具，当前版本 **v1.3.2**，面向 Android 17 / API 37。
+轻量 Android 息屏挂机工具，当前版本 **v1.3.3**，面向 Android 17 / API 37。
 
 ## 工作方式
 
@@ -30,6 +30,24 @@
 
 构建脚本会在本地 `signing/` 下生成测试签名密钥，并将产物写到 `out/`。这两个目录都不应提交到 Git。
 
+## Debug 模式
+
+当悬浮「息屏」按钮已经显示时，再次从桌面启动 Lucky，可切换 Debug 模式。按钮显示 `息屏 DBG` 代表 Debug 已开启。
+
+Debug 模式只替换诊断点击路径，正常模式仍直接走 v1.3.2 已验证的核心逻辑。Debug 开启后会记录点击、权限模式、worker 启动以及最终 shell 返回码。点击息屏后，无论成功还是失败，worker 在退出前都会尝试把完整诊断日志复制到系统剪切板；同时写入 App 私有目录的 `files/debug-last.txt` 作为异常退出兜底。
+
+常见返回码：
+
+- `41`：ROM 的 `cmd display` 不提供 `power-off`
+- `42`：保存原 `screen_off_timeout` 失败
+- `43`：延长 `screen_off_timeout` 失败
+- `44`：Power 键 watcher 启动后立即退出
+- `45`：`cmd display power-off 0` 执行失败
+- `90`：Shizuku `rish_shizuku.dex` 提取失败
+- `250`：无可用 Shizuku 上下文 / 权限模式
+- `251`：Native 内存分配失败
+- `255`：`system()` 在取得子进程退出码之前失败
+
 ## 紧急恢复
 
 极少数 ROM 或 Shizuku 被强停导致 watcher 消失时：
@@ -41,4 +59,4 @@ adb shell settings put system screen_off_timeout <原值>
 
 必要时可使用硬件组合键强制重启。
 
-更详细的版本说明与恢复说明见仓库中的 `CHANGES-v1.3.2.txt`、`DEX_FIX.txt` 和 `RECOVERY.txt`。
+更详细的版本说明与恢复说明见仓库中的 `CHANGES-v1.3.3.txt`、`DEX_FIX.txt` 和 `RECOVERY.txt`。

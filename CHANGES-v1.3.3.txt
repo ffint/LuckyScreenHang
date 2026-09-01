@@ -1,0 +1,7 @@
+LuckyScreenHang v1.3.3
+
+- 新增 Debug 模式：悬浮按钮存在时再次启动 App，可切换 Debug；按钮显示“息屏 DBG”表示已开启。
+- Debug 模式从 Activity 启动开始记录权限、Overlay、Shizuku/Root 探测、线程创建、shell 返回码等关键路径。
+- worker 退出前将完整 Debug 日志复制到系统剪切板；同时写入 App 私有 files/debug-last.txt 作为异常退出兜底。
+- 对 41/42/43/44/45/90/250/251/255 等退出码提供含义，便于定位“点击后无反应”。
+- 正常模式的息屏/恢复流程保持不变。

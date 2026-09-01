@@ -7,7 +7,7 @@ strings=[]
 def s(x):
     if x not in strings: strings.append(x)
     return strings.index(x)
-for x in ['android','http://schemas.android.com/apk/res/android','manifest','package','versionCode','versionName','com.lucky.screenhang.v13','1.3.2','uses-sdk','minSdkVersion','targetSdkVersion','uses-permission','android.permission.SYSTEM_ALERT_WINDOW','queries','moe.shizuku.privileged.api','application','label','hasCode','Lucky 息屏挂机 v1.3.2','activity','name','exported','com.lucky.screenhang.v13.MainActivity','intent-filter','action','android.intent.action.MAIN','category','android.intent.category.LAUNCHER']:
+for x in ['android','http://schemas.android.com/apk/res/android','manifest','package','versionCode','versionName','com.lucky.screenhang.v13','1.3.3','uses-sdk','minSdkVersion','targetSdkVersion','uses-permission','android.permission.SYSTEM_ALERT_WINDOW','queries','moe.shizuku.privileged.api','application','label','hasCode','Lucky 息屏挂机 v1.3.3','activity','name','exported','com.lucky.screenhang.v13.MainActivity','intent-filter','action','android.intent.action.MAIN','category','android.intent.category.LAUNCHER']:
     s(x)
 ANDROID_URI=s('http://schemas.android.com/apk/res/android'); ANDROID_PREFIX=s('android')
 def enc_len(n): return bytes([n]) if n<=0x7f else bytes([(n>>8)|0x80,n&0xff])
@@ -38,11 +38,11 @@ def start(tag,attrs=(),line=1):
     return nh(0x0102,size,line)+ext+b''.join(attrs)
 def end(tag,line=1): return nh(0x0103,24,line)+struct.pack('<II',NO,s(tag))
 chunks=[ns_start(1)]
-chunks += [start('manifest',[astr('package','com.lucky.screenhang.v13',False),aint('versionCode',6),astr('versionName','1.3.2')],2)]
+chunks += [start('manifest',[astr('package','com.lucky.screenhang.v13',False),aint('versionCode',7),astr('versionName','1.3.3')],2)]
 chunks += [start('uses-sdk',[aint('minSdkVersion',29),aint('targetSdkVersion',37)],3),end('uses-sdk',3)]
 chunks += [start('uses-permission',[astr('name','android.permission.SYSTEM_ALERT_WINDOW')],4),end('uses-permission',4)]
 chunks += [start('queries',[],5),start('package',[astr('name','moe.shizuku.privileged.api')],6),end('package',6),end('queries',7)]
-chunks += [start('application',[astr('label','Lucky 息屏挂机 v1.3.2'),abool('hasCode',True)],8)]
+chunks += [start('application',[astr('label','Lucky 息屏挂机 v1.3.3'),abool('hasCode',True)],8)]
 chunks += [start('activity',[astr('name','com.lucky.screenhang.v13.MainActivity'),abool('exported',True)],9)]
 chunks += [start('intent-filter',[],10),start('action',[astr('name','android.intent.action.MAIN')],11),end('action',11),start('category',[astr('name','android.intent.category.LAUNCHER')],12),end('category',12),end('intent-filter',13)]
 chunks += [end('activity',14),end('application',15),end('manifest',16),ns_end(17)]
