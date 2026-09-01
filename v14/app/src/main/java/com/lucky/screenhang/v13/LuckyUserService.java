@@ -43,7 +43,7 @@ public class LuckyUserService extends ILuckyUserService.Stub {
                 add("watcher failed to become ready ready=" + ready + " process=" + (wp != null));
                 return 44;
             }
-            add("watcher ready pid=" + wp.pid());
+            add("watcher ready");
 
             int off = commandCode("/system/bin/cmd", "display", "power-off", "0");
             add("power-off rc=" + off);
