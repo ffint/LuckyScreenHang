@@ -1,0 +1,11 @@
+Lucky Screen Hang v1.3.1 crash fix
+
+v1.3 encoded Dalvik format 35c invoke instructions incorrectly:
+- wrong: op | (A << 8) | (G << 12)
+- correct: op | (G << 8) | (A << 12)
+
+In format 35c, A (argument count) occupies bits 12..15 and G occupies bits 8..11.
+The v1.3 launcher therefore produced invoke instructions with A=0/G=1 where A=1/G=0 was required, causing ART verification failure before Activity startup.
+
+v1.3.1 fixes the encoding and build.sh now runs src/verify_dex.py before packaging.
+Package name remains com.lucky.screenhang.v13 and versionCode is 5, so the shipped APK can update v1.3 in place.

@@ -1,0 +1,8 @@
+Lucky Screen Hang v1.3.2 changes
+
+1. Overlay is removed synchronously in the button click callback before any Shizuku/root shell work starts.
+   Immediate wake after tapping therefore cannot reveal a stale Lucky overlay button.
+2. Startup permission order is now explicit:
+   SYSTEM_ALERT_WINDOW -> Shizuku preflight -> Magisk root fallback -> show overlay button.
+3. Already-granted permissions are detected and are not requested again.
+4. Keeps package com.lucky.screenhang.v13 and the same shipped signing certificate as v1.3.1.

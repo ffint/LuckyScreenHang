@@ -1,0 +1,16 @@
+紧急恢复（正常情况下不需要）
+
+正常恢复方式：
+1. 第一次按 Power：Android 正常进入 sleep/锁屏；后台 watcher 自动解除 display power override 并恢复原 screen_off_timeout，然后退出。
+2. 第二次按 Power：Android 正常唤醒并点亮屏幕。
+
+如果 Shizuku/Root 进程被强制终止，导致屏幕 override 未解除，可用 ADB / Shizuku / Root shell：
+  cmd display power-reset 0
+  OLD=$(cat /data/local/tmp/lucky_screen_hang_v13.timeout 2>/dev/null)
+  case x$OLD in x|xnull) OLD=60000 ;; esac
+  settings put system screen_off_timeout "$OLD"
+  P=$(cat /data/local/tmp/lucky_screen_hang_v13.pid 2>/dev/null)
+  case x$P in x|xnull) ;; *) kill "$P" 2>/dev/null ;; esac
+  rm -f /data/local/tmp/lucky_screen_hang_v13.timeout /data/local/tmp/lucky_screen_hang_v13.pid
+
+若完全无法 ADB，可使用手机硬件强制重启组合键。
