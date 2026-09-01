@@ -22,7 +22,8 @@ public class MainActivity extends Activity {
     private final ServiceConnection conn = new ServiceConnection() {
         @Override public void onServiceConnected(ComponentName n, IBinder b) {
             remote=ILuckyUserService.Stub.asInterface(b); binding=false;
-            toast("Shizuku UserService 已连接");
+            try { toast("UserService 已连接 · " + remote.status()); }
+            catch (Throwable t) { toast("Shizuku UserService 已连接"); }
             showOverlayAndFinish();
         }
         @Override public void onServiceDisconnected(ComponentName n) { remote=null; binding=false; }
@@ -61,7 +62,7 @@ public class MainActivity extends Activity {
         if(binding) return; binding=true;
         try {
             Shizuku.UserServiceArgs args=new Shizuku.UserServiceArgs(new ComponentName(this, LuckyUserService.class))
-                    .daemon(true).processNameSuffix("lucky_daemon").tag("lucky-screen-hang-v14").version(1);
+                    .daemon(true).processNameSuffix("lucky_daemon").tag("lucky-screen-hang-v14").version(1400);
             Shizuku.bindUserService(args, conn);
         } catch(Throwable t){ binding=false; toast("UserService bind 失败: "+t); }
     }

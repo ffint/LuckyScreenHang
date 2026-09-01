@@ -11,6 +11,7 @@ public class LuckyUserService extends ILuckyUserService.Stub {
     private final StringBuilder log = new StringBuilder();
     private final AtomicBoolean running = new AtomicBoolean(false);
     private volatile int oldTimeout = 60000;
+    private volatile Process watcherProcess;
 
     public LuckyUserService() { add("UserService created"); }
 
@@ -25,14 +26,26 @@ public class LuckyUserService extends ILuckyUserService.Stub {
             int set = commandCode("/system/bin/settings", "put", "system", "screen_off_timeout", "2147483647");
             if (set != 0) { add("set timeout failed=" + set); running.set(false); return 43; }
 
+            watcherProcess = null;
             Thread watcher = new Thread(this::watchPowerAndRestore, "LuckyPowerWatcher");
             watcher.setDaemon(false);
             watcher.start();
-            try { Thread.sleep(250); } catch (InterruptedException ignored) {}
+
+            for (int i=0; i<10 && watcherProcess==null && running.get(); i++) {
+                try { Thread.sleep(50); } catch (InterruptedException ignored) {}
+            }
+            Process wp = watcherProcess;
+            if (wp == null || !wp.isAlive()) {
+                add("watcher failed to stay alive");
+                restore(); running.set(false); return 44;
+            }
 
             int off = commandCode("/system/bin/cmd", "display", "power-off", "0");
             add("power-off rc=" + off);
-            if (off != 0) { restore(); running.set(false); return 45; }
+            if (off != 0) {
+                try { wp.destroy(); } catch (Throwable ignored) {}
+                restore(); running.set(false); return 45;
+            }
             return 0;
         } catch (Throwable t) {
             add("screenOff exception: " + t);
@@ -45,6 +58,7 @@ public class LuckyUserService extends ILuckyUserService.Stub {
         try {
             add("watcher starting getevent");
             p = new ProcessBuilder("/system/bin/getevent", "-ql").redirectErrorStream(true).start();
+            watcherProcess = p;
             try (BufferedReader br = new BufferedReader(new InputStreamReader(p.getInputStream()))) {
                 String line;
                 while ((line = br.readLine()) != null) {
@@ -58,6 +72,7 @@ public class LuckyUserService extends ILuckyUserService.Stub {
             }
         } catch (Throwable t) { add("watcher exception: " + t); }
         finally {
+            watcherProcess = null;
             if (p != null) p.destroy();
             restore(); running.set(false); add("watcher restored display");
         }
