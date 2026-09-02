@@ -95,3 +95,4 @@ jobs:
               --target "$GITHUB_SHA" \
               --title 'LuckyScreenHang v1.4.5' \
               --notes '正式版：Shizuku daemon UserService + SurfaceControl 物理息屏。悬浮按钮调整为 96dp × 44dp、14sp，文字改为“息屏挂机”。首次切换到新的正式签名链时，如设备上仍安装旧签名的同包名版本，需要先卸载旧正式版再安装 v1.4.5；此后通过 Action 发布的正式版本可以直接覆盖升级。'
+          fi
