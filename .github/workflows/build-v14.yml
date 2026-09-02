@@ -11,7 +11,7 @@ jobs:
     runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: '17'
@@ -23,15 +23,18 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.13'
-      - name: Build unsigned release
+      - name: Build signed debug test APK
         working-directory: v14
-        run: gradle :app:assembleRelease --stacktrace
+        run: gradle :app:assembleDebug --stacktrace
       - name: Collect APK
         run: |
           mkdir -p artifact
-          cp $(find v14/app/build/outputs/apk/release -name '*.apk' | head -1) artifact/LuckyScreenHang-v1.4-exp-unsigned.apk
+          cp $(find v14/app/build/outputs/apk/debug -name '*.apk' | head -1) \
+            artifact/LuckyScreenHang-Android17-v1.4.2-test.apk
+          shasum -a 256 artifact/LuckyScreenHang-Android17-v1.4.2-test.apk \
+            > artifact/LuckyScreenHang-Android17-v1.4.2-test.sha256.txt
       - uses: actions/upload-artifact@v4
         with:
-          name: LuckyScreenHang-v1.4-exp
-          path: artifact/LuckyScreenHang-v1.4-exp-unsigned.apk
+          name: LuckyScreenHang-v1.4.2-test
+          path: artifact/*
           retention-days: 7

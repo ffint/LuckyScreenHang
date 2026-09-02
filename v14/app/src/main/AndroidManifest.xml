@@ -2,7 +2,9 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
     <uses-permission android:name="moe.shizuku.manager.permission.API_V23" />
-    <application android:theme="@style/AppTheme" android:label="Lucky 息屏挂机 v1.4">
+    <application
+        android:theme="@style/AppTheme"
+        android:label="Lucky 息屏 v1.4.2 测试版">
         <meta-data android:name="moe.shizuku.client.V3_SUPPORT" android:value="true" />
         <provider
             android:name="rikka.shizuku.ShizukuProvider"
