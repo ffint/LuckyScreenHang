@@ -2,6 +2,10 @@ name: Release LuckyScreenHang v1.4.5
 
 on:
   workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/release-trigger-v1.4.5'
 
 permissions:
   contents: write
