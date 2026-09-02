@@ -18,7 +18,6 @@ import android.util.TypedValue;
 import android.view.Gravity;
 import android.view.View;
 import android.view.WindowManager;
-import android.widget.Button;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -41,7 +40,7 @@ public class MainActivity extends Activity {
             } catch (Throwable t) {
                 toast("Shizuku UserService 已连接");
             }
-            showOverlayAndFinish();
+            showButtonAndFinish();
         }
 
         @Override
@@ -113,7 +112,7 @@ public class MainActivity extends Activity {
                 return;
             }
             if (remote != null) {
-                showOverlayAndFinish();
+                showButtonAndFinish();
                 return;
             }
             bindUserService();
@@ -140,53 +139,76 @@ public class MainActivity extends Activity {
         }
     }
 
-    private void showOverlayAndFinish() {
+    private void showButtonAndFinish() {
         runOnUiThread(() -> {
-            if (overlay == null) {
-                Context app = getApplicationContext();
-                windowManager = (WindowManager) app.getSystemService(WINDOW_SERVICE);
+            removeOverlayInternal();
+            Context app = getApplicationContext();
+            windowManager = (WindowManager) app.getSystemService(WINDOW_SERVICE);
 
-                Button button = new Button(app);
-                button.setText("息屏 T");
-                button.setTextSize(TypedValue.COMPLEX_UNIT_SP, 16);
-                button.setTextColor(Color.WHITE);
-                button.setAllCaps(false);
-                button.setSingleLine(true);
-                button.setGravity(Gravity.CENTER);
-                button.setMinWidth(0);
-                button.setMinHeight(0);
-                button.setPadding(dp(14), 0, dp(14), 0);
-                button.setElevation(dp(8));
+            TextView button = new TextView(app);
+            button.setText("息屏");
+            button.setTextSize(TypedValue.COMPLEX_UNIT_SP, 17);
+            button.setTextColor(Color.WHITE);
+            button.setSingleLine(true);
+            button.setIncludeFontPadding(false);
+            button.setGravity(Gravity.CENTER);
+            button.setPadding(dp(16), 0, dp(16), 0);
+            button.setElevation(dp(8));
 
-                GradientDrawable background = new GradientDrawable();
-                background.setColor(0xE6266FEF);
-                background.setCornerRadius(dp(30));
-                background.setStroke(Math.max(1, dp(1)), 0x55FFFFFF);
-                button.setBackground(background);
+            GradientDrawable background = new GradientDrawable();
+            background.setColor(0xED266FEF);
+            background.setCornerRadius(dp(30));
+            background.setStroke(Math.max(1, dp(1)), 0x66FFFFFF);
+            button.setBackground(background);
 
-                WindowManager.LayoutParams params = new WindowManager.LayoutParams(
-                        dp(120), dp(60),
-                        WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
-                        WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
-                                | WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL,
-                        PixelFormat.TRANSLUCENT);
-                params.gravity = Gravity.END | Gravity.CENTER_VERTICAL;
-                params.x = dp(12);
-                button.setOnClickListener(v -> screenOff());
-                button.setOnLongClickListener(v -> {
-                    copyCurrentLog();
-                    return true;
-                });
+            WindowManager.LayoutParams params = new WindowManager.LayoutParams(
+                    dp(128), dp(60),
+                    WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
+                    WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
+                            | WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL,
+                    PixelFormat.TRANSLUCENT);
+            params.gravity = Gravity.END | Gravity.CENTER_VERTICAL;
+            params.x = dp(12);
+            button.setOnClickListener(v -> screenOff());
+            button.setOnLongClickListener(v -> {
+                copyCurrentLog();
+                return true;
+            });
 
-                try {
-                    windowManager.addView(button, params);
-                    overlay = button;
-                } catch (Throwable t) {
-                    toast("悬浮窗创建失败: " + t);
-                    return;
-                }
+            try {
+                windowManager.addView(button, params);
+                overlay = button;
+            } catch (Throwable t) {
+                toast("悬浮窗创建失败: " + t);
+                return;
             }
             finishAndRemoveTask();
+        });
+    }
+
+    private void showBlackCurtain() {
+        runOnUiThread(() -> {
+            removeOverlayInternal();
+            Context app = getApplicationContext();
+            windowManager = (WindowManager) app.getSystemService(WINDOW_SERVICE);
+            View curtain = new View(app);
+            curtain.setBackgroundColor(Color.BLACK);
+            WindowManager.LayoutParams params = new WindowManager.LayoutParams(
+                    WindowManager.LayoutParams.MATCH_PARENT,
+                    WindowManager.LayoutParams.MATCH_PARENT,
+                    WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
+                    WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
+                            | WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE
+                            | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN
+                            | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
+                    PixelFormat.OPAQUE);
+            params.gravity = Gravity.FILL;
+            try {
+                windowManager.addView(curtain, params);
+                overlay = curtain;
+            } catch (Throwable t) {
+                toast("遮罩创建失败: " + t.getClass().getSimpleName());
+            }
         });
     }
 
@@ -198,8 +220,8 @@ public class MainActivity extends Activity {
         }
         new Thread(() -> {
             try {
-                String log = service.getLog();
-                runOnUiThread(() -> copyAndToast(log, "日志已复制"));
+                String currentLog = service.getLog();
+                runOnUiThread(() -> copyAndToast(currentLog, "日志已复制"));
             } catch (Throwable t) {
                 toast("读取日志失败: " + t.getClass().getSimpleName());
             }
@@ -207,49 +229,67 @@ public class MainActivity extends Activity {
     }
 
     private void removeOverlayNow() {
-        runOnUiThread(() -> {
-            View old = overlay;
-            overlay = null;
-            if (old != null && windowManager != null) {
-                try {
-                    windowManager.removeViewImmediate(old);
-                } catch (Throwable ignored) {}
-            }
-        });
+        runOnUiThread(this::removeOverlayInternal);
+    }
+
+    private void removeOverlayInternal() {
+        View old = overlay;
+        overlay = null;
+        if (old != null && windowManager != null) {
+            try {
+                windowManager.removeViewImmediate(old);
+            } catch (Throwable ignored) {}
+        }
     }
 
     private void screenOff() {
         final ILuckyUserService service = remote;
-        removeOverlayNow();
         if (service == null) {
+            removeOverlayNow();
             toast("UserService 未连接，请重新打开 Lucky");
             return;
         }
 
+        showBlackCurtain();
+
         new Thread(() -> {
             try {
+                try {
+                    Thread.sleep(40L);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                }
                 int rc = service.screenOff();
                 if (rc != 0) {
-                    String log = service.getLog();
-                    getSharedPreferences("debug", 0).edit().putString("last", log).apply();
-                    runOnUiThread(() -> copyAndToast(log,
-                            "息屏失败 rc=" + rc + "，日志已复制"));
+                    String currentLog = service.getLog();
+                    getSharedPreferences("debug", 0).edit()
+                            .putString("last", currentLog).apply();
+                    runOnUiThread(() -> {
+                        removeOverlayInternal();
+                        copyAndToast(currentLog,
+                                "息屏失败 rc=" + rc + "，日志已复制");
+                        showButtonAndFinish();
+                    });
                 } else {
                     try {
-                        Thread.sleep(300L);
+                        Thread.sleep(250L);
                     } catch (InterruptedException e) {
                         Thread.currentThread().interrupt();
                     }
                     android.os.Process.killProcess(android.os.Process.myPid());
                 }
             } catch (Throwable t) {
-                String log = "UserService 调用异常: " + t;
+                String currentLog = "UserService 调用异常: " + t;
                 try {
-                    log = service.getLog() + "\n" + log;
+                    currentLog = service.getLog() + "\n" + currentLog;
                 } catch (Throwable ignored) {}
-                final String finalLog = log;
-                runOnUiThread(() -> copyAndToast(finalLog,
-                        "UserService 调用失败: " + t.getClass().getSimpleName()));
+                final String finalLog = currentLog;
+                runOnUiThread(() -> {
+                    removeOverlayInternal();
+                    copyAndToast(finalLog,
+                            "UserService 调用失败: " + t.getClass().getSimpleName());
+                    showButtonAndFinish();
+                });
             }
         }, "LuckyScreenOffCall").start();
     }
