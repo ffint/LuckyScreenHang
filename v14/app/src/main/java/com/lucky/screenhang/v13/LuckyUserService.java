@@ -51,9 +51,6 @@ public class LuckyUserService extends ILuckyUserService.Stub {
         final long session;
         synchronized (sessionLock) {
             if (running) {
-                // The caller can only make a new request after returning to an interactive screen.
-                // Therefore an older still-running session is stale and must never poison all
-                // future attempts with a permanent "already running" state.
                 add("new request while session=" + currentSession
                         + " is still active; cancelling stale session");
                 cancelCurrentSessionLocked("new screenOff request");
@@ -111,9 +108,17 @@ public class LuckyUserService extends ILuckyUserService.Stub {
             }
             add("watcher ready session=" + session);
 
-            boolean binderOk = requestDisplayPower(DISPLAY_STATE_OFF);
-            int shellRc = binderOk ? 0
-                    : commandCode("/system/bin/cmd", "display", "power-off", "0");
+            boolean binderOk;
+            int shellRc;
+            synchronized (sessionLock) {
+                if (!isCurrent(session) || stopRequested) {
+                    finishSession(session, false, "cancelled before power-off");
+                    return 48;
+                }
+                binderOk = requestDisplayPower(DISPLAY_STATE_OFF);
+                shellRc = binderOk ? 0
+                        : commandCode("/system/bin/cmd", "display", "power-off", "0");
+            }
             add("power-off requested session=" + session
                     + " binder=" + binderOk + " shellRc=" + shellRc);
 
@@ -122,10 +127,6 @@ public class LuckyUserService extends ILuckyUserService.Stub {
                 return 45;
             }
 
-            // requestDisplayPower is deliberately outside PowerManager's normal wakefulness
-            // lifecycle. Some games, video/HDR surfaces and OEM display optimizers can issue a
-            // later display-state update. Reasserting OFF through the already-connected Binder is
-            // cheap: no polling command, no process spawn, and no CPU work between intervals.
             Thread guard = new Thread(() -> keepDisplayOff(session),
                     "LuckyDisplayGuard-" + session);
             guard.setDaemon(true);
@@ -147,12 +148,18 @@ public class LuckyUserService extends ILuckyUserService.Stub {
                 Thread.currentThread().interrupt();
                 return;
             }
-            if (!isCurrent(session) || !running || stopRequested) return;
 
-            boolean ok = requestDisplayPower(DISPLAY_STATE_OFF);
+            boolean ok;
+            int shellRc = 0;
+            synchronized (sessionLock) {
+                if (!isCurrent(session) || !running || stopRequested) return;
+                ok = requestDisplayPower(DISPLAY_STATE_OFF);
+                if (!ok && pass % 4 == 0) {
+                    shellRc = commandCode("/system/bin/cmd", "display", "power-off", "0");
+                }
+            }
             if (!ok && pass % 4 == 0) {
-                int rc = commandCode("/system/bin/cmd", "display", "power-off", "0");
-                add("display guard shell fallback session=" + session + " rc=" + rc);
+                add("display guard shell fallback session=" + session + " rc=" + shellRc);
             }
             pass++;
         }
@@ -264,7 +271,7 @@ public class LuckyUserService extends ILuckyUserService.Stub {
         if (!running) return;
         long oldSession = currentSession;
         stopRequested = true;
-        currentSession++; // invalidate old watcher/guard before destroying their process
+        currentSession++;
         Process p = watcherProcess;
         watcherProcess = null;
         if (p != null) {
@@ -276,9 +283,6 @@ public class LuckyUserService extends ILuckyUserService.Stub {
     }
 
     private void restore(boolean afterPowerKey) {
-        // STATE_UNKNOWN means: remove the temporary override and return to whatever state
-        // PowerManager currently expects. If Android has just gone to sleep, that expected state
-        // remains OFF, so the first power press does not light the panel; the second wakes it.
         boolean binderReset = requestDisplayPower(DISPLAY_STATE_UNKNOWN);
         int resetRc = binderReset ? 0
                 : commandCode("/system/bin/cmd", "display", "power-reset", "0");
