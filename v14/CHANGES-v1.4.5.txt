@@ -1,0 +1,8 @@
+LuckyScreenHang v1.4.5
+
+- 基于已验证稳定的 v1.4.4 息屏逻辑，不修改 Shizuku UserService、SurfaceControl 物理关屏、Power watcher 与恢复链路。
+- 悬浮按钮缩小为 96dp × 44dp，文字缩小为 14sp。
+- 按钮文字改为“息屏挂机”。
+- 应用名称改为“Lucky 息屏挂机”。
+- 正式版本 versionCode=15，versionName=1.4.5。
+- 新增 GitHub Actions 正式发布工作流：release APK 由 Action 构建，私钥仅从 GitHub Secret 读取，仓库只保存公钥证书；构建完成后自动发布 GitHub Release v1.4.5。

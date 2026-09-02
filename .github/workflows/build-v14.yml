@@ -40,12 +40,12 @@ jobs:
         run: |
           mkdir -p artifact
           cp $(find v14/app/build/outputs/apk/debug -name '*.apk' | head -1) \
-            artifact/LuckyScreenHang-Android17-v1.4.4-test-ci.apk
-          shasum -a 256 artifact/LuckyScreenHang-Android17-v1.4.4-test-ci.apk \
-            > artifact/LuckyScreenHang-Android17-v1.4.4-test-ci.sha256.txt
+            artifact/LuckyScreenHang-Android17-v1.4.5-test-ci.apk
+          shasum -a 256 artifact/LuckyScreenHang-Android17-v1.4.5-test-ci.apk \
+            > artifact/LuckyScreenHang-Android17-v1.4.5-test-ci.sha256.txt
 
       - uses: actions/upload-artifact@v4
         with:
-          name: LuckyScreenHang-v1.4.4-test-ci
+          name: LuckyScreenHang-v1.4.5-test-ci
           path: artifact/*
           retention-days: 7

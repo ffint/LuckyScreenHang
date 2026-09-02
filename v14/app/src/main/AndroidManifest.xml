@@ -5,7 +5,7 @@
 
     <application
         android:theme="@style/AppTheme"
-        android:label="Lucky 息屏 v1.4.4 测试版">
+        android:label="Lucky 息屏挂机">
         <meta-data
             android:name="moe.shizuku.client.V3_SUPPORT"
             android:value="true" />

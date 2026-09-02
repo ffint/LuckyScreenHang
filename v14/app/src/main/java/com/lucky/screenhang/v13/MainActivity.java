@@ -146,23 +146,23 @@ public class MainActivity extends Activity {
             windowManager = (WindowManager) app.getSystemService(WINDOW_SERVICE);
 
             TextView button = new TextView(app);
-            button.setText("息屏");
-            button.setTextSize(TypedValue.COMPLEX_UNIT_SP, 17);
+            button.setText("息屏挂机");
+            button.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14);
             button.setTextColor(Color.WHITE);
             button.setSingleLine(true);
             button.setIncludeFontPadding(false);
             button.setGravity(Gravity.CENTER);
-            button.setPadding(dp(16), 0, dp(16), 0);
+            button.setPadding(dp(10), 0, dp(10), 0);
             button.setElevation(dp(8));
 
             GradientDrawable background = new GradientDrawable();
             background.setColor(0xED266FEF);
-            background.setCornerRadius(dp(30));
+            background.setCornerRadius(dp(22));
             background.setStroke(Math.max(1, dp(1)), 0x66FFFFFF);
             button.setBackground(background);
 
             WindowManager.LayoutParams params = new WindowManager.LayoutParams(
-                    dp(128), dp(60),
+                    dp(96), dp(44),
                     WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
                     WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
                             | WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL,
