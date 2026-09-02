@@ -17,20 +17,10 @@ android {
         buildConfig true
     }
 
-    signingConfigs {
-        test {
-            storeFile file('../test-signing/lucky-test.keystore')
-            storePassword 'luckytest'
-            keyAlias 'luckytest'
-            keyPassword 'luckytest'
-        }
-    }
-
     buildTypes {
         debug {
             applicationIdSuffix '.test'
             versionNameSuffix '-test'
-            signingConfig signingConfigs.test
         }
         release {
             minifyEnabled false

@@ -7,4 +7,4 @@ LuckyScreenHang v1.4.4-exp-test
 - 点击按钮时短暂显示黑色 curtain，遮住唯一一次显示切换；成功后普通 App 进程退出，daemon UserService 保留。
 - Power 键恢复时，直接 SurfaceControl 路径在系统确认进入 sleep 后不强制 NORMAL，交由下一次 Power 唤醒自然恢复，避免人为制造亮屏闪烁。
 - 保留 stale session 自愈：若旧 watcher 异常残留，新请求会先清理旧 session 再执行，不会永久卡在 already running。
-- 测试包改用仓库内公开的测试专用签名。该密钥仅用于 com.lucky.screenhang.v13.test，未来测试版可以直接覆盖升级；不得用于正式发布。
+- GitHub Actions 只生成 CI 测试 APK；最终交付包在构建后用私有测试密钥重新签名。仓库不保存签名私钥。

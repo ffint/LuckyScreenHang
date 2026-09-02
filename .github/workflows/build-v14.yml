@@ -32,18 +32,7 @@ jobs:
         with:
           gradle-version: '8.13'
 
-      - name: Restore public test signing key
-        run: |
-          python3 - <<'PYKEY'
-          import base64
-          from pathlib import Path
-          source = Path('v14/test-signing/lucky-test.keystore.b64')
-          target = Path('v14/test-signing/lucky-test.keystore')
-          target.parent.mkdir(parents=True, exist_ok=True)
-          target.write_bytes(base64.b64decode(source.read_text().strip()))
-          PYKEY
-
-      - name: Build signed debug test APK
+      - name: Build test APK
         working-directory: v14
         run: gradle :app:assembleDebug --stacktrace
 
@@ -51,12 +40,12 @@ jobs:
         run: |
           mkdir -p artifact
           cp $(find v14/app/build/outputs/apk/debug -name '*.apk' | head -1) \
-            artifact/LuckyScreenHang-Android17-v1.4.4-test.apk
-          shasum -a 256 artifact/LuckyScreenHang-Android17-v1.4.4-test.apk \
-            > artifact/LuckyScreenHang-Android17-v1.4.4-test.sha256.txt
+            artifact/LuckyScreenHang-Android17-v1.4.4-test-ci.apk
+          shasum -a 256 artifact/LuckyScreenHang-Android17-v1.4.4-test-ci.apk \
+            > artifact/LuckyScreenHang-Android17-v1.4.4-test-ci.sha256.txt
 
       - uses: actions/upload-artifact@v4
         with:
-          name: LuckyScreenHang-v1.4.4-test
+          name: LuckyScreenHang-v1.4.4-test-ci
           path: artifact/*
           retention-days: 7
