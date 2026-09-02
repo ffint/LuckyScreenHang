@@ -27,7 +27,7 @@ jobs:
         with:
           gradle-version: '8.13'
 
-      - name: Restore and verify release signing key
+      - name: Restore release signing key
         env:
           RELEASE_KEY_B64: ${{ secrets.LUCKY_RELEASE_KEY_PEM_B64 }}
         run: |
@@ -36,8 +36,17 @@ jobs:
             echo 'Missing GitHub Actions secret: LUCKY_RELEASE_KEY_PEM_B64' >&2
             exit 2
           fi
-          printf '%s' "$RELEASE_KEY_B64" | base64 --decode > "$RUNNER_TEMP/lucky-release-key.pem"
+          python3 - <<'PYKEY'
+          import base64, os
+          from pathlib import Path
+          value = os.environ['RELEASE_KEY_B64'].strip()
+          Path(os.environ['RUNNER_TEMP'], 'lucky-release-key.pem').write_bytes(base64.b64decode(value))
+          PYKEY
           chmod 600 "$RUNNER_TEMP/lucky-release-key.pem"
+
+      - name: Verify release signing identity
+        run: |
+          set -eu
           openssl pkey -in "$RUNNER_TEMP/lucky-release-key.pem" -pubout -outform DER \
             | shasum -a 256 | awk '{print $1}' > "$RUNNER_TEMP/key.pub.sha256"
           openssl x509 -in v14/signing/release-cert.pem -pubkey -noout \
@@ -50,7 +59,7 @@ jobs:
         working-directory: v14
         run: gradle :app:assembleRelease --stacktrace
 
-      - name: Sign release APK
+      - name: Sign and verify release APK
         run: |
           set -eu
           mkdir -p artifact
@@ -81,4 +90,4 @@ jobs:
             gh release create v1.4.5 artifact/* \
               --target "$GITHUB_SHA" \
               --title 'LuckyScreenHang v1.4.5' \
-              --notes '正式版：Shizuku daemon UserService + SurfaceControl 物理息屏。悬浮按钮缩小并改为“息屏挂机”。首次切换到新的正式签名链时，如设备上仍安装旧签名的同包名版本，需要先卸载旧正式版再安装 v1.4.5；后续 Action 正式版可直接覆盖升级。'
+              --notes '正式版：Shizuku daemon UserService + SurfaceControl 物理息屏。悬浮按钮调整为 96dp × 44dp、14sp，文字改为“息屏挂机”。首次切换到新的正式签名链时，如设备上仍安装旧签名的同包名版本，需要先卸载旧正式版再安装 v1.4.5；此后通过 Action 发布的正式版本可以直接覆盖升级。'
