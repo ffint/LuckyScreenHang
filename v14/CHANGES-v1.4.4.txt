@@ -1,0 +1,10 @@
+LuckyScreenHang v1.4.4-exp-test
+
+- 删除 v1.4.3 的周期性 DisplayManager OFF guard。此前将“显示状态未变化”的 false 当成失败，反复调用 cmd display power-off，部分 HDR/高刷/视频 App 会与系统显示事务争抢，造成数次闪屏。
+- 改为与 MAA Meow 相同的核心控制方式：通过 SurfaceControl.setDisplayPowerMode() 对物理 Display token 一次性设置 POWER_MODE_OFF；Android 14+ 在 SurfaceControl 不再提供物理 ID 时使用 DisplayControl 兼容层。
+- 只有直接物理面板控制不可用时，才回退到 cmd display power-off；不会同时叠加两条关屏路径。
+- 删除所有周期性关屏轮询，息屏后只保留阻塞式 Power 键 watcher，空闲时不持续唤醒 CPU。
+- 点击按钮时短暂显示黑色 curtain，遮住唯一一次显示切换；成功后普通 App 进程退出，daemon UserService 保留。
+- Power 键恢复时，直接 SurfaceControl 路径在系统确认进入 sleep 后不强制 NORMAL，交由下一次 Power 唤醒自然恢复，避免人为制造亮屏闪烁。
+- 保留 stale session 自愈：若旧 watcher 异常残留，新请求会先清理旧 session 再执行，不会永久卡在 already running。
+- GitHub Actions 只生成 CI 测试 APK；最终交付包在构建后用私有测试密钥重新签名。仓库不保存签名私钥。

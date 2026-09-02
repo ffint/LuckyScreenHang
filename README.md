@@ -1,56 +1,57 @@
 # LuckyScreenHang
 
-轻量 Android 息屏挂机工具，当前版本 **v1.3.3**，面向 Android 17 / API 37。
+轻量 Android 息屏挂机工具。当前正式版本：**v1.4.5**，面向 Android 17 / API 37。
 
 ## 工作方式
 
-1. 启动 App 后先检查/请求“显示在其他应用上层”权限，再预检查 Shizuku；Shizuku 不可用时使用 Magisk Root 兜底。
-2. 权限准备成功后创建一个很小的 `TYPE_APPLICATION_OVERLAY` 圆形「息屏」按钮，并把自身 Activity 退到后台。
-3. 不读取 Recent Tasks，不调用 `am task focus`，也不猜测“上一个 App”。
-4. 在任何当前界面点击悬浮按钮：Shizuku 优先，失败则 Magisk Root 兜底；物理显示进入 OFF，但 Android 仍保持 interactive。
-5. 点击按钮的同一 UI 回调中立即移除悬浮窗，然后执行息屏；App 随后退出。后台只剩一个阻塞在 `getevent` 的 shell watcher，空闲时不轮询。
-6. 恢复时第一次按 Power 让系统正常进入 sleep/锁屏；watcher 检测 `KEY_POWER UP` 后解除 display power override 并恢复原 `screen_off_timeout`，随后自行退出；第二次按 Power 由 Android 正常唤醒/亮屏。
+1. 启动 App 后检查悬浮窗权限和 Shizuku 授权。
+2. 通过 Shizuku API 启动一个 daemon `UserService`，以 shell UID 2000 运行；不再在每次点击时临时启动 `rish/app_process`。
+3. 权限准备完成后显示一个小型 `TYPE_APPLICATION_OVERLAY` 按钮，文字为“息屏挂机”，Activity 随后退出。
+4. 点击按钮后先显示短暂黑色遮罩，再由 UserService 对物理 Display token 调用 `SurfaceControl.setDisplayPowerMode(..., POWER_MODE_OFF)`；只有直接物理控制不可用时才回退到一次 `cmd display power-off 0`。
+5. Android 仍保持 interactive，应用/游戏可继续运行；后台只保留 daemon UserService 和阻塞式 Power 键 watcher，不进行周期轮询。
+6. 第一次按 Power 让系统正常进入 sleep/锁屏，watcher 确认系统电源状态后恢复 `screen_off_timeout` 并结束本次 session；第二次按 Power 由 Android 正常唤醒屏幕。
+7. 如果旧 watcher 异常残留，新一次请求会先清理旧 session 再继续，不会永久卡在 `already running`。
 
-## 平台
+## v1.4.5
+
+- 保持已验证稳定的 v1.4.4 息屏/恢复逻辑不变。
+- 悬浮按钮调整为 `96dp × 44dp`。
+- 按钮文字大小调整为 `14sp`。
+- 按钮文字改为 **“息屏挂机”**。
+- `versionCode 15` / `versionName 1.4.5`。
+
+## 平台与权限
 
 - Android 17 / `targetSdkVersion 37`
-- `arm64-v8a`
-- Native ELF 16 KB page alignment
 - 包名：`com.lucky.screenhang.v13`
-- 权限：`SYSTEM_ALERT_WINDOW`
+- Shizuku API `13.1.5`
+- 权限：`SYSTEM_ALERT_WINDOW`、Shizuku API 权限
 - 无网络权限、无存储权限
 
 ## 构建
 
+v1.4 工程位于 `v14/`：
+
 ```sh
-./build.sh
+cd v14
+gradle :app:assembleDebug
 ```
 
-主要需要：Python 3、clang/lld（支持 `aarch64-linux-android29` target）、OpenSSL、zip。
+正式版本由 GitHub Actions 的 `Release LuckyScreenHang v1.4.5` 工作流构建和发布。仓库只保存正式签名的公钥证书；私钥必须放在 GitHub Actions Secret `LUCKY_RELEASE_KEY_PEM_B64` 中，绝不提交到仓库。
 
-构建脚本会在本地 `signing/` 下生成测试签名密钥，并将产物写到 `out/`。这两个目录都不应提交到 Git。
+## Debug / 日志
 
-## Debug 模式
+UserService 会把运行日志写到：
 
-当悬浮「息屏」按钮已经显示时，再次从桌面启动 Lucky，可切换 Debug 模式。按钮显示 `息屏 DBG` 代表 Debug 已开启。
+```text
+/sdcard/Download/LuckyScreenHang-v14.log
+```
 
-Debug 模式只替换诊断点击路径，正常模式仍直接走 v1.3.2 已验证的核心逻辑。Debug 开启后会记录点击、权限模式、worker 启动以及最终 shell 返回码。点击息屏后，无论成功还是失败，worker 在退出前都会尝试把完整诊断日志复制到系统剪切板；同时写入 App 私有目录的 `files/debug-last.txt` 作为异常退出兜底。
-
-常见返回码：
-
-- `41`：ROM 的 `cmd display` 不提供 `power-off`
-- `42`：保存原 `screen_off_timeout` 失败
-- `43`：延长 `screen_off_timeout` 失败
-- `44`：Power 键 watcher 启动后立即退出
-- `45`：`cmd display power-off 0` 执行失败
-- `90`：Shizuku `rish_shizuku.dex` 提取失败
-- `250`：无可用 Shizuku 上下文 / 权限模式
-- `251`：Native 内存分配失败
-- `255`：`system()` 在取得子进程退出码之前失败
+悬浮按钮支持长按复制当前 UserService 日志。
 
 ## 紧急恢复
 
-极少数 ROM 或 Shizuku 被强停导致 watcher 消失时：
+极少数异常情况下可以通过 ADB 执行：
 
 ```sh
 adb shell cmd display power-reset 0
@@ -59,4 +60,4 @@ adb shell settings put system screen_off_timeout <原值>
 
 必要时可使用硬件组合键强制重启。
 
-更详细的版本说明与恢复说明见仓库中的 `CHANGES-v1.3.3.txt`、`DEX_FIX.txt` 和 `RECOVERY.txt`。
+旧的 v1.3.x 极简 native 实现仍保留在仓库根目录作为历史参考；当前主线实现为 `v14/` 下的 Shizuku UserService 架构。

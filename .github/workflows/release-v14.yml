@@ -1,0 +1,84 @@
+name: Release LuckyScreenHang v1.4.5
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Normalize Android 17 SDK path
+        run: |
+          if [ ! -e "$ANDROID_HOME/platforms/android-37" ]; then
+            ln -s "$ANDROID_HOME/platforms/android-37.0" "$ANDROID_HOME/platforms/android-37"
+          fi
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.13'
+
+      - name: Restore and verify release signing key
+        env:
+          RELEASE_KEY_B64: ${{ secrets.LUCKY_RELEASE_KEY_PEM_B64 }}
+        run: |
+          set -eu
+          if [ -z "${RELEASE_KEY_B64:-}" ]; then
+            echo 'Missing GitHub Actions secret: LUCKY_RELEASE_KEY_PEM_B64' >&2
+            exit 2
+          fi
+          printf '%s' "$RELEASE_KEY_B64" | base64 --decode > "$RUNNER_TEMP/lucky-release-key.pem"
+          chmod 600 "$RUNNER_TEMP/lucky-release-key.pem"
+          openssl pkey -in "$RUNNER_TEMP/lucky-release-key.pem" -pubout -outform DER \
+            | shasum -a 256 | awk '{print $1}' > "$RUNNER_TEMP/key.pub.sha256"
+          openssl x509 -in v14/signing/release-cert.pem -pubkey -noout \
+            | openssl pkey -pubin -outform DER \
+            | shasum -a 256 | awk '{print $1}' > "$RUNNER_TEMP/cert.pub.sha256"
+          cmp "$RUNNER_TEMP/key.pub.sha256" "$RUNNER_TEMP/cert.pub.sha256"
+          openssl x509 -in v14/signing/release-cert.pem -noout -fingerprint -sha256
+
+      - name: Build unsigned release APK
+        working-directory: v14
+        run: gradle :app:assembleRelease --stacktrace
+
+      - name: Sign release APK
+        run: |
+          set -eu
+          mkdir -p artifact
+          unsigned_apk=$(find v14/app/build/outputs/apk/release -name '*unsigned*.apk' | head -1)
+          test -n "$unsigned_apk"
+          python3 src/sign_apk_v2.py \
+            "$unsigned_apk" \
+            artifact/LuckyScreenHang-Android17-v1.4.5.apk \
+            "$RUNNER_TEMP/lucky-release-key.pem" \
+            v14/signing/release-cert.pem
+          shasum -a 256 artifact/LuckyScreenHang-Android17-v1.4.5.apk \
+            > artifact/LuckyScreenHang-Android17-v1.4.5.sha256.txt
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: LuckyScreenHang-v1.4.5
+          path: artifact/*
+          retention-days: 30
+
+      - name: Publish GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -eu
+          if gh release view v1.4.5 >/dev/null 2>&1; then
+            gh release upload v1.4.5 artifact/* --clobber
+          else
+            gh release create v1.4.5 artifact/* \
+              --target "$GITHUB_SHA" \
+              --title 'LuckyScreenHang v1.4.5' \
+              --notes '正式版：Shizuku daemon UserService + SurfaceControl 物理息屏。悬浮按钮缩小并改为“息屏挂机”。首次切换到新的正式签名链时，如设备上仍安装旧签名的同包名版本，需要先卸载旧正式版再安装 v1.4.5；后续 Action 正式版可直接覆盖升级。'
