@@ -8,8 +8,8 @@ android {
         applicationId 'com.lucky.screenhang.v13'
         minSdk 29
         targetSdk 37
-        versionCode 12
-        versionName '1.4.2-exp'
+        versionCode 13
+        versionName '1.4.3-exp'
     }
 
     buildFeatures { aidl true }

@@ -1,7 +1,5 @@
 package com.lucky.screenhang.v13;
 
-import android.os.IBinder;
-
 import java.io.BufferedReader;
 import java.io.FileOutputStream;
 import java.io.InputStreamReader;
@@ -9,16 +7,15 @@ import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.nio.charset.StandardCharsets;
 import java.text.SimpleDateFormat;
-import java.util.ArrayList;
 import java.util.Date;
-import java.util.List;
 import java.util.Locale;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 
 public class LuckyUserService extends ILuckyUserService.Stub {
-    private static final int POWER_MODE_OFF = 0;
-    private static final int POWER_MODE_NORMAL = 2;
+    private static final int DISPLAY_DEFAULT = 0;
+    private static final int DISPLAY_STATE_UNKNOWN = 0;
+    private static final int DISPLAY_STATE_OFF = 1;
 
     private final StringBuilder log = new StringBuilder();
     private final Object logLock = new Object();
@@ -30,8 +27,8 @@ public class LuckyUserService extends ILuckyUserService.Stub {
     private volatile int oldTimeout = 60000;
     private volatile Process watcherProcess;
 
-    private volatile Method setDisplayPowerModeMethod;
-    private volatile List<IBinder> physicalDisplayTokens;
+    private volatile Object displayManagerGlobal;
+    private volatile Method requestDisplayPowerMethod;
 
     public LuckyUserService() {
         add("UserService created version=" + BuildConfig.VERSION_NAME
@@ -54,6 +51,9 @@ public class LuckyUserService extends ILuckyUserService.Stub {
         final long session;
         synchronized (sessionLock) {
             if (running) {
+                // The caller can only make a new request after returning to an interactive screen.
+                // Therefore an older still-running session is stale and must never poison all
+                // future attempts with a permanent "already running" state.
                 add("new request while session=" + currentSession
                         + " is still active; cancelling stale session");
                 cancelCurrentSessionLocked("new screenOff request");
@@ -111,18 +111,23 @@ public class LuckyUserService extends ILuckyUserService.Stub {
             }
             add("watcher ready session=" + session);
 
-            boolean direct = setPhysicalDisplayPower(POWER_MODE_OFF);
-            int shellRc = commandCode("/system/bin/cmd", "display", "power-off", "0");
+            boolean binderOk = requestDisplayPower(DISPLAY_STATE_OFF);
+            int shellRc = binderOk ? 0
+                    : commandCode("/system/bin/cmd", "display", "power-off", "0");
             add("power-off requested session=" + session
-                    + " direct=" + direct + " shellRc=" + shellRc);
+                    + " binder=" + binderOk + " shellRc=" + shellRc);
 
-            if (!direct && shellRc != 0) {
+            if (!binderOk && shellRc != 0) {
                 finishSession(session, false, "all power-off paths failed");
                 return 45;
             }
 
-            Thread guard = new Thread(() -> keepPanelOff(session),
-                    "LuckyPanelGuard-" + session);
+            // requestDisplayPower is deliberately outside PowerManager's normal wakefulness
+            // lifecycle. Some games, video/HDR surfaces and OEM display optimizers can issue a
+            // later display-state update. Reasserting OFF through the already-connected Binder is
+            // cheap: no polling command, no process spawn, and no CPU work between intervals.
+            Thread guard = new Thread(() -> keepDisplayOff(session),
+                    "LuckyDisplayGuard-" + session);
             guard.setDaemon(true);
             guard.start();
             return 0;
@@ -133,20 +138,21 @@ public class LuckyUserService extends ILuckyUserService.Stub {
         }
     }
 
-    private void keepPanelOff(long session) {
+    private void keepDisplayOff(long session) {
         int pass = 0;
         while (isCurrent(session) && running && !stopRequested) {
             try {
-                Thread.sleep(pass < 6 ? 250L : 2000L);
+                Thread.sleep(pass < 8 ? 250L : 1500L);
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
                 return;
             }
             if (!isCurrent(session) || !running || stopRequested) return;
-            boolean ok = setPhysicalDisplayPower(POWER_MODE_OFF);
-            if (!ok && pass % 5 == 0) {
+
+            boolean ok = requestDisplayPower(DISPLAY_STATE_OFF);
+            if (!ok && pass % 4 == 0) {
                 int rc = commandCode("/system/bin/cmd", "display", "power-off", "0");
-                add("panel guard fallback session=" + session + " rc=" + rc);
+                add("display guard shell fallback session=" + session + " rc=" + rc);
             }
             pass++;
         }
@@ -175,7 +181,8 @@ public class LuckyUserService extends ILuckyUserService.Stub {
                     if (isWakeRelease(line)) {
                         wakeKey = true;
                         stopRequested = true;
-                        add("wake key detected session=" + session + " event=" + compact(line));
+                        add("wake key detected session=" + session
+                                + " event=" + compact(line));
                         break;
                     }
                 }
@@ -183,7 +190,8 @@ public class LuckyUserService extends ILuckyUserService.Stub {
 
             if (wakeKey && isCurrent(session)) {
                 boolean slept = waitForSystemSleep();
-                add("power transition session=" + session + " sleepConfirmed=" + slept);
+                add("power transition session=" + session
+                        + " sleepConfirmed=" + slept);
             }
         } catch (Throwable t) {
             ready.countDown();
@@ -196,7 +204,8 @@ public class LuckyUserService extends ILuckyUserService.Stub {
             if (isCurrent(session)) {
                 finishSession(session, wakeKey, wakeKey ? "wake key" : "watcher ended");
             } else {
-                add("old watcher exited session=" + session + " current=" + currentSession);
+                add("old watcher exited session=" + session
+                        + " current=" + currentSession);
             }
         }
     }
@@ -255,7 +264,7 @@ public class LuckyUserService extends ILuckyUserService.Stub {
         if (!running) return;
         long oldSession = currentSession;
         stopRequested = true;
-        currentSession++;
+        currentSession++; // invalidate old watcher/guard before destroying their process
         Process p = watcherProcess;
         watcherProcess = null;
         if (p != null) {
@@ -267,71 +276,47 @@ public class LuckyUserService extends ILuckyUserService.Stub {
     }
 
     private void restore(boolean afterPowerKey) {
-        int resetRc = commandCode("/system/bin/cmd", "display", "power-reset", "0");
-        if (!afterPowerKey) {
-            setPhysicalDisplayPower(POWER_MODE_NORMAL);
-            if (resetRc != 0) {
-                commandCode("/system/bin/cmd", "display", "power-on", "0");
-            }
-        }
+        // STATE_UNKNOWN means: remove the temporary override and return to whatever state
+        // PowerManager currently expects. If Android has just gone to sleep, that expected state
+        // remains OFF, so the first power press does not light the panel; the second wakes it.
+        boolean binderReset = requestDisplayPower(DISPLAY_STATE_UNKNOWN);
+        int resetRc = binderReset ? 0
+                : commandCode("/system/bin/cmd", "display", "power-reset", "0");
+        add("display reset binder=" + binderReset + " shellRc=" + resetRc
+                + " afterPowerKey=" + afterPowerKey);
         commandCode("/system/bin/settings", "put", "system",
                 "screen_off_timeout", Integer.toString(oldTimeout));
     }
 
-    private boolean setPhysicalDisplayPower(int mode) {
+    private boolean requestDisplayPower(int state) {
         try {
-            ensureSurfaceControl();
-            List<IBinder> tokens = physicalDisplayTokens;
-            if (tokens == null || tokens.isEmpty()) {
-                add("SurfaceControl has no physical display token");
-                return false;
-            }
-            for (IBinder token : tokens) {
-                setDisplayPowerModeMethod.invoke(null, token, mode);
-            }
-            return true;
+            ensureDisplayManager();
+            Object result = requestDisplayPowerMethod.invoke(
+                    displayManagerGlobal, DISPLAY_DEFAULT, state);
+            return !(result instanceof Boolean) || (Boolean) result;
         } catch (Throwable t) {
-            add("SurfaceControl mode=" + mode + " failed: " + stackMessage(t));
-            setDisplayPowerModeMethod = null;
-            physicalDisplayTokens = null;
+            add("DisplayManager state=" + state + " failed: " + stackMessage(t));
+            requestDisplayPowerMethod = null;
+            displayManagerGlobal = null;
             return false;
         }
     }
 
-    private void ensureSurfaceControl() throws Exception {
-        if (setDisplayPowerModeMethod != null
-                && physicalDisplayTokens != null
-                && !physicalDisplayTokens.isEmpty()) {
-            return;
-        }
+    private void ensureDisplayManager() throws Exception {
+        if (requestDisplayPowerMethod != null && displayManagerGlobal != null) return;
         synchronized (sessionLock) {
-            if (setDisplayPowerModeMethod != null
-                    && physicalDisplayTokens != null
-                    && !physicalDisplayTokens.isEmpty()) {
-                return;
-            }
-            Class<?> surfaceControl = Class.forName("android.view.SurfaceControl");
-            Method getIds = surfaceControl.getDeclaredMethod("getPhysicalDisplayIds");
-            Method getToken = surfaceControl.getDeclaredMethod(
-                    "getPhysicalDisplayToken", long.class);
-            Method setMode = surfaceControl.getDeclaredMethod(
-                    "setDisplayPowerMode", IBinder.class, int.class);
-            getIds.setAccessible(true);
-            getToken.setAccessible(true);
-            setMode.setAccessible(true);
-
-            long[] ids = (long[]) getIds.invoke(null);
-            List<IBinder> tokens = new ArrayList<>();
-            if (ids != null) {
-                for (long id : ids) {
-                    Object token = getToken.invoke(null, id);
-                    if (token instanceof IBinder) tokens.add((IBinder) token);
-                }
-            }
-            if (tokens.isEmpty()) throw new IllegalStateException("no physical display token");
-            physicalDisplayTokens = tokens;
-            setDisplayPowerModeMethod = setMode;
-            add("SurfaceControl ready physicalDisplays=" + tokens.size());
+            if (requestDisplayPowerMethod != null && displayManagerGlobal != null) return;
+            Class<?> clazz = Class.forName("android.hardware.display.DisplayManagerGlobal");
+            Method getInstance = clazz.getDeclaredMethod("getInstance");
+            Method request = clazz.getDeclaredMethod(
+                    "requestDisplayPower", int.class, int.class);
+            getInstance.setAccessible(true);
+            request.setAccessible(true);
+            Object instance = getInstance.invoke(null);
+            if (instance == null) throw new IllegalStateException("DisplayManagerGlobal is null");
+            displayManagerGlobal = instance;
+            requestDisplayPowerMethod = request;
+            add("DisplayManager Binder ready");
         }
     }
 
@@ -350,7 +335,8 @@ public class LuckyUserService extends ILuckyUserService.Stub {
                         + " out=" + compact(out.toString()));
             }
         } catch (Throwable t) {
-            add("command exception " + String.join(" ", cmd) + ": " + stackMessage(t));
+            add("command exception " + String.join(" ", cmd)
+                    + ": " + stackMessage(t));
         }
         return out.toString();
     }
@@ -371,7 +357,8 @@ public class LuckyUserService extends ILuckyUserService.Stub {
             }
             return rc;
         } catch (Throwable t) {
-            add("command exception " + String.join(" ", cmd) + ": " + stackMessage(t));
+            add("command exception " + String.join(" ", cmd)
+                    + ": " + stackMessage(t));
             return 127;
         }
     }
@@ -379,7 +366,8 @@ public class LuckyUserService extends ILuckyUserService.Stub {
     private String compact(String s) {
         if (s == null) return "";
         String oneLine = s.replace('\n', ' ').replace('\r', ' ').trim();
-        return oneLine.length() > 300 ? oneLine.substring(0, 300) + "…" : oneLine;
+        return oneLine.length() > 300
+                ? oneLine.substring(0, 300) + "…" : oneLine;
     }
 
     private String stackMessage(Throwable t) {
