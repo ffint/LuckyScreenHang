@@ -12,7 +12,10 @@ android {
         versionName '1.4.3-exp'
     }
 
-    buildFeatures { aidl true }
+    buildFeatures {
+        aidl true
+        buildConfig true
+    }
     buildTypes {
         debug {
             applicationIdSuffix '.test'
